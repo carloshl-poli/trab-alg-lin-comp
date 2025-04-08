@@ -3,10 +3,15 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include <string.h> 
+#include <string.h>
+#include <time.h>
 
 //row-major macro
 #define A(i,j) A[i*n + j]
+
+int getMin(int x, int y) {
+    return x < y ? x : y;
+}
 
 void swap_rows(double* matrix, double* temp, size_t columns_amount, size_t row_index_a, size_t row_index_b) {
     size_t row_size = columns_amount * sizeof(double);
@@ -217,7 +222,7 @@ double* gauss_jacobi(double** A, double* b, double tolerance, size_t max_iter, s
             }
             new_x[i] = (b[i] - sum) / A[i][i];
         }
-        if (hasConverged(new_x, past_x, n, tolerance, true, k, max_iter, log_file)) {
+        if (hasConverged(new_x, past_x, n, tolerance, false, k, max_iter, log_file)) {
             free(past_x);
             fclose(log_file);
             return new_x;
@@ -242,60 +247,191 @@ double compute_residual(double** A, double* x, double* b, size_t n) {
     }
     return sqrt(norm);
 }
-
+// ---------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
 // Prototypes (certifique-se de que esses estão no seu código principal ou num header)
+#define MAX_PATH 128
 
-int main() {
-    size_t n = 3;
-    double tolerance = 1e-10;
-    size_t max_iter = 100;
-
-    // Alocação da matriz A
-    double** A = (double**)malloc(n * sizeof(double*));
+double** aloca_matriz(size_t n) {
+    double** M = (double**)malloc(n * sizeof(double*));
     for (size_t i = 0; i < n; i++) {
-        A[i] = (double*)malloc(n * sizeof(double));
+        M[i] = (double*)malloc(n * sizeof(double));
     }
-
-    // Alocação do vetor b
-    double* b = (double*)malloc(n * sizeof(double));
-
-    // Sistema: 10x + y + z = 12
-    //          x + 10y + z = 12
-    //          x + y + 10z = 12
-
-    A[0][0] = 10; A[0][1] = 1;  A[0][2] = 1;
-    A[1][0] = 1;  A[1][1] = 10; A[1][2] = 1;
-    A[2][0] = 1;  A[2][1] = 1;  A[2][2] = 10;
-
-    b[0] = 12;
-    b[1] = 12;
-    b[2] = 12;
-
-    // Chamada do método de Jacobi
-    double* x = gauss_jacobi(A, b, tolerance, max_iter, n);
-
-    if (x == NULL) {
-        printf("Erro ao resolver o sistema com Jacobi.\n");
-    } else {
-        printf("\nSolução aproximada com Jacobi:\n");
-        for (size_t i = 0; i < n; i++) {
-            printf("x[%zu] = %.10f\n", i, x[i]);
-        }
-
-        double res = compute_residual(A, x, b, n);
-        printf("Norma do resíduo: %.10e\n", res);
-
-        free(x);
-    }
-
-    // Liberação de memória
-    for (size_t i = 0; i < n; i++) {
-        free(A[i]);
-    }
-    free(A);
-    free(b);
-
-    printf("program finished\n");
-    return 0;
+    return M;
 }
 
+void libera_matriz(double** M, size_t n) {
+    for (size_t i = 0; i < n; i++) free(M[i]);
+    free(M);
+}
+
+double** le_matriz(const char* path, size_t n) {
+    FILE* f = fopen(path, "r");
+    if (!f) { perror(path); exit(1); }
+
+    double** M = aloca_matriz(n);
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = 0; j < n; j++)
+            fscanf(f, "%lf", &M[i][j]);
+    fclose(f);
+    return M;
+}
+
+double* le_vetor(const char* path, size_t n) {
+    FILE* f = fopen(path, "r");
+    if (!f) { perror(path); exit(1); }
+
+    double* v = (double*)malloc(n * sizeof(double));
+    for (size_t i = 0; i < n; i++)
+        fscanf(f, "%lf", &v[i]);
+    fclose(f);
+    return v;
+}
+
+void testa_matriz(int id, size_t n, bool usar_gauss, bool usar_lu, bool usar_jacobi) {
+    char pathA[MAX_PATH], pathB[MAX_PATH];
+    snprintf(pathA, MAX_PATH, "test_subjects/mat%d_A.txt", id);
+    snprintf(pathB, MAX_PATH, "test_subjects/mat%d_b.txt", id);
+
+    printf("\n========= Matriz %d (%zu x %zu) =========\n", id, n, n);
+
+    double** A = le_matriz(pathA, n);
+    double* b = le_vetor(pathB, n);
+
+    time_t start, end;
+    double time_taken;
+
+    if (usar_gauss) {
+        double** A_gauss = aloca_matriz(n);
+        for (size_t i = 0; i < n; i++) memcpy(A_gauss[i], A[i], n * sizeof(double));
+        double* b_gauss = (double*)malloc(n * sizeof(double));
+        memcpy(b_gauss, b, n * sizeof(double));
+        start = time(NULL);
+        double* x = gauss_elim(A_gauss, b_gauss, n);
+        end = time(NULL);
+        time_taken = difftime(end, start);
+        if (x) {
+            printf("Method: Gauss Elimination\n");
+            printf("Tempo de execução real: %f segundos\n", time_taken);
+            getchar();
+            for (size_t i = 0; i < n; i++) {
+                printf("x[%zu] = %.6f \n", i, x[i]);
+            }
+            double res = compute_residual(A, x, b, n);
+            printf("[Gauss] Resíduo (norma 2) ||Ax - b|| = %.5e\n", res);
+            free(x);
+        } else {
+            printf("[Gauss] Falha na eliminação (pivot zero).\n");
+        }
+        libera_matriz(A_gauss, n);
+        free(b_gauss);
+    }
+
+    if (usar_lu) {
+        double** U = aloca_matriz(n);
+        double** L = (double**)calloc(n, sizeof(double*));
+        for (size_t i = 0; i < n; i++) {
+            L[i] = (double*)calloc(n, sizeof(double));
+            memcpy(U[i], A[i], n * sizeof(double));
+        }
+        start = time(NULL);
+        if (factorization_LU(A, L, U, n) == 0) {
+            double* x = solve_factorized_system(L, U, b, n);
+            end = time(NULL);
+            time_taken = difftime(end, start);
+            printf("Method: LU Fatoration\n");
+            printf("Tempo de execução real: %f segundos\n", time_taken);
+            getchar();
+            for (size_t i = 0; i < n; i++) {
+                printf("x[%zu] = %.6f \n", i, x[i]);
+            }
+            double res = compute_residual(A, x, b, n);
+            printf("[LU]     Resíduo (norma 2) ||Ax - b|| = %.5e\n", res);
+            free(x);
+        } else {
+            printf("[LU]     Fatoração falhou (pivot zero).\n");
+        }
+        libera_matriz(L, n);
+        libera_matriz(U, n);
+    }
+
+    if (usar_jacobi) {
+        int max_iter = getMin(1000, n * 15);
+        start = time(NULL);
+        double* x = gauss_jacobi(A, b, 1e-6, max_iter, n);
+        end = time(NULL);
+        time_taken = difftime(end, start);
+        if (x) {
+            printf("Method: Gauss-Jacobi\n");
+            printf("Tempo de execução real: %f segundos\n", time_taken);
+            getchar();
+            for (size_t i = 0; i < n; i++) {
+                printf("x[%zu] = %.6f \n", i, x[i]);
+            }
+
+            double res = compute_residual(A, x, b, n);
+            printf("[Jacobi] Resíduo (norma 2) ||Ax - b|| = %.5e\n", res);
+            free(x);
+        } else {
+            printf("[Jacobi] Falha (divisão por zero ou não convergiu).\n");
+        }
+    }
+
+    libera_matriz(A, n);
+    free(b);
+}
+
+// Tabela com configurações: {id, tamanho, gauss, LU, Jacobi}
+void roda_todos_os_testes() {
+    struct {
+        int id; size_t n; bool g, lu, j;
+    } testes[] = {
+        {1, 3,  true, true, true},
+        {2, 5,  true, true, true},
+        {3,100, true, true, true},
+        {4,500, true, true, true},
+        {5, 5,  true, true, false},
+        {6, 4,  true, true, true},
+        {7, 2,  false,false,true},
+        {8,10,  true, true, true},
+        {9,10,  true, true, true}
+    };
+
+    int escolha;
+    char continuar;
+
+    do {
+        printf("\nEscolha uma matriz para testar (1 a 9): ");
+        if (scanf("%d", &escolha) != 1 || escolha < 1 || escolha > 9) {
+            printf("Entrada inválida. Tente novamente.\n");
+            while (getchar() != '\n'); // limpa buffer
+            continue;
+        }
+
+        int index = escolha - 1;
+        testa_matriz(
+            testes[index].id,
+            testes[index].n,
+            testes[index].g,
+            testes[index].lu,
+            testes[index].j
+        );
+
+        printf("\nDeseja testar outra matriz? (s/n): ");
+        while (getchar() != '\n'); // limpa buffer anterior
+        continuar = getchar();
+
+    } while (continuar == 's' || continuar == 'S');
+}
+
+int main() {
+    roda_todos_os_testes();
+    return 0;
+}
