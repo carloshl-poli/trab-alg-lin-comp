@@ -8,12 +8,22 @@
 //row-major macro
 #define A(i,j) A[i*n + j]
 
-/*
-double* gauss_elim_row_major(double* A, double* b, size_t n) {
+void swap_rows(double* matrix, double* temp, size_t columns_amount, size_t row_index_a, size_t row_index_b) {
+    size_t row_size = columns_amount * sizeof(double);
+    double* row_a = matrix + row_index_a * columns_amount;
+    double* row_b = matrix + row_index_b * columns_amount;
 
+    memcpy(temp, row_a, row_size);
+    memcpy(row_a, row_b, row_size);
+    memcpy(row_b, temp, row_size);
+}
+
+
+double* gauss_elim_row_major(double* A, double* b, size_t n) {
+    double* temp = (double *)malloc(n * sizeof(double));
     // iterate rows
     for (size_t k = 0; k < n; k++) {
-
+        
         size_t max_row = k;
         for (size_t i = k+1; i < n; i++) {
             if (fabs(A(i,k)) > fabs(A(max_row,k))) {
@@ -26,34 +36,32 @@ double* gauss_elim_row_major(double* A, double* b, size_t n) {
             return NULL;
         }
 
-        double* temp = A[k];
-        A[k] = A[max_row];
-        A[max_row] = temp;
-
-        double tmp_b = b[k];
+        swap_rows(A, temp, n, k, max_row);
+        double temp_b = b[k];
         b[k] = b[max_row];
-        b[max_row] = tmp_b;
+        b[max_row] = temp_b;
 
         for (size_t i = (k+1); i < n; i++) {
-            double m = A[i][k] / A[k][k];
+            double m = A(i,k) / A(k,k);
             for (size_t j = k; j < n; j++) {
-                A[i][j] = A[i][j] - m * A[k][j];
+                A(i,j) -= m * A(k,j);
             }
             b[i] = b[i] - m * b[k];
         }
     }
 
-    double* x = (double *)malloc(n * sizeof(double));
+    double* x = temp;
     for (int i = (int)(n - 1); i >= 0; i--) {
             double sum = 0;
             for (size_t j = i + 1; j < n; j++) {
-                sum = sum + A[i][j] * x[j];
+                sum += A(i,j) * x[j];
             }
-            x[i] = (b[i] - sum) / A[i][i];
+            x[i] = (b[i] - sum) / A(i,i);
     }
+    
     return x;
 }
-*/
+
 
 // IMPORTANT: 
 //  - L must be zero matrix (use calloc instead of malloc to achieve this)
@@ -81,7 +89,7 @@ int factorization_LU(double** A, double** L, double** U, size_t n) {
 double* solve_factorized_system(double** L, double** U, double* b, size_t n) {
     double* y = (double *)malloc(n * sizeof(double));
     
-    // Fase 2: resolução de Ly = b
+    // Solving Ly = b
     y[0] = b[0] / L[0][0];
     for (size_t i = 1; i < n; i++) {
         double sum = 0.0;
@@ -91,7 +99,7 @@ double* solve_factorized_system(double** L, double** U, double* b, size_t n) {
         y[i] = (b[i] - sum) / L[i][i];
     }
 
-    // Fase 3: resolução de Ux = y
+    // Solving Ux = y
     double* x = (double *)malloc(n * sizeof(double));
     for (int i = (int )(n - 1); i >= 0; i--) {
         double sum = 0.0;
